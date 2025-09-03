@@ -78,9 +78,7 @@ textarea{min-height:110px; resize:vertical; font-size:15px;}
 
     <h3>Clientes Visitados</h3>
     <p class="small-note">No es obligatorio completar todo por cliente.</p>
-    <div class="clientes-wrapper" id="clientesWrapper">
-      <!-- Se agregarán los clientes aquí -->
-    </div>
+    <div class="clientes-wrapper" id="clientesWrapper"></div>
     <div class="actions-row">
       <button type="button" class="btn add" id="addClienteBtn">➕ Agregar Cliente</button>
       <span class="muted">Añade cuantos clientes necesites</span>
@@ -96,13 +94,13 @@ textarea{min-height:110px; resize:vertical; font-size:15px;}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyQQxLlqklVvNbLScS86n4Ll85HTWLtZOS-bJ3pHYf24HNvfZviXezSwMIyaBa1xzoofw/exec";
+
 let clienteCount=0;
 const wrapper=document.getElementById("clientesWrapper");
 
 document.getElementById("addClienteBtn").addEventListener("click", ()=>{
-  if(document.activeElement) document.activeElement.blur();
   clienteCount++;
-  
   const card=document.createElement("div");
   card.classList.add("cliente-card");
   card.innerHTML=`
@@ -121,15 +119,13 @@ document.getElementById("addClienteBtn").addEventListener("click", ()=>{
     </div>
     <div><label>Observaciones</label><input type="text"></div>
   `;
-
-  // Forzar renderizado en móviles
   setTimeout(()=>wrapper.appendChild(card),50);
   card.scrollIntoView({behavior:'smooth'});
 });
 
 const form=document.getElementById("reporteForm");
 const enviarBtn=document.getElementById("submitBtn");
-form.addEventListener("submit", e=>{
+form.addEventListener("submit", async e=>{
   e.preventDefault();
   if(!document.getElementById("dni").value.trim()||
      !document.getElementById("fecha").value||
@@ -141,13 +137,46 @@ form.addEventListener("submit", e=>{
   }
   enviarBtn.classList.add("bounce");
   setTimeout(()=>enviarBtn.classList.remove("bounce"),420);
-  descargarPDF();
-  form.reset();
-  wrapper.innerHTML='';
-  clienteCount=0;
-});
 
-function descargarPDF(){
+  // Crear objeto de datos
+  const clientes = [];
+  document.querySelectorAll(".cliente-card").forEach(c=>{
+    const inputs = c.querySelectorAll("input, select");
+    clientes.push({
+      nombre: inputs[0].value,
+      direccion: inputs[1].value,
+      telefono: inputs[2].value,
+      servicio: inputs[3].value,
+      obs: inputs[4].value
+    });
+  });
+
+  const data = {
+    dni: document.getElementById("dni").value,
+    fecha: document.getElementById("fecha").value,
+    turno: document.getElementById("turno").value,
+    ciudad: document.getElementById("ciudad").value,
+    vendedor: document.getElementById("vendedor").value,
+    zona: document.getElementById("zona").value,
+    nap: document.getElementById("nap").value,
+    comentarios: document.getElementById("comentarios").value,
+    clientes: clientes
+  };
+
+  // Enviar a Google Script
+  try{
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(data)
+    });
+    alert("Datos enviados correctamente al servidor.");
+  }catch(err){
+    console.error(err);
+    alert("Error enviando datos al servidor.");
+  }
+
+  // Descargar PDF
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF();
   let y=20;
@@ -155,19 +184,29 @@ function descargarPDF(){
   doc.text("Reporte Diario de Ventas - Telecable",10,y);
   y+=10;
   doc.setFontSize(10);
-  doc.text(`DNI: ${document.getElementById("dni").value||""}`,10,y+=10);
-  doc.text(`Fecha: ${document.getElementById("fecha").value||""}`,100,y);
-  doc.text(`Turno: ${document.getElementById("turno").value||""}`,10,y+=10);
-  doc.text(`Sede: ${document.getElementById("ciudad").value||""}`,100,y);
-  doc.text(`Vendedor: ${document.getElementById("vendedor").value||""}`,10,y+=10);
-  doc.text(`Zona: ${document.getElementById("zona").value||""}`,100,y);
-  doc.text(`NAP: ${document.getElementById("nap").value||""}`,10,y+=10);
+  doc.text(`DNI: ${data.dni}`,10,y+=10);
+  doc.text(`Fecha: ${data.fecha}`,100,y);
+  doc.text(`Turno: ${data.turno}`,10,y+=10);
+  doc.text(`Sede: ${data.ciudad}`,100,y);
+  doc.text(`Vendedor: ${data.vendedor}`,10,y+=10);
+  doc.text(`Zona: ${data.zona}`,100,y);
+  doc.text(`NAP: ${data.nap}`,10,y+=10);
   doc.text("Comentarios:",10,y+=10);
-  doc.text(document.getElementById("comentarios").value||"-",10,y+=10);
+  doc.text(data.comentarios||"-",10,y+=10);
+
+  y+=10;
+  doc.text("Clientes:",10,y);
+  data.clientes.forEach((c,i)=>{
+    y+=6;
+    doc.text(`${i+1}. ${c.nombre} | ${c.direccion} | ${c.telefono} | ${c.servicio} | ${c.obs}`,10,y);
+  });
+
   doc.save("Reporte_Telecable.pdf");
-}
+
+  form.reset();
+  wrapper.innerHTML='';
+  clienteCount=0;
+});
 </script>
 </body>
 </html>
-
-
